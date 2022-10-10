@@ -20,12 +20,12 @@ import java.util.Collection;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 
-import io.netty5.buffer.api.BufferAllocator;
-import io.netty5.handler.codec.http.cookie.Cookie;
-import io.netty5.handler.codec.http.cookie.DefaultCookie;
+import io.netty5.handler.codec.http.headers.DefaultHttpSetCookie;
+import io.netty5.handler.codec.http.headers.HttpSetCookie;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import reactor.core.publisher.Flux;
+import reactor.netty5.ChannelOperationsId;
 import reactor.netty5.Connection;
 import reactor.netty5.NettyInbound;
 import reactor.netty5.http.client.HttpClientResponse;
@@ -37,7 +37,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseCookie;
 import org.springframework.lang.Nullable;
-import org.springframework.util.ClassUtils;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -53,11 +52,6 @@ import org.springframework.util.ObjectUtils;
  * @see reactor.netty5.http.client.HttpClient
  */
 class ReactorNetty2ClientHttpResponse implements ClientHttpResponse {
-
-	/** Reactor Netty 1.0.5+. */
-	static final boolean reactorNettyRequestChannelOperationsIdPresent = ClassUtils.isPresent(
-			"reactor.netty5.ChannelOperationsId", ReactorNetty2ClientHttpResponse.class.getClassLoader());
-
 
 	private static final Log logger = LogFactory.getLog(ReactorNetty2ClientHttpResponse.class);
 
@@ -86,25 +80,12 @@ class ReactorNetty2ClientHttpResponse implements ClientHttpResponse {
 		this.bufferFactory = new Netty5DataBufferFactory(connection.outbound().alloc());
 	}
 
-	/**
-	 * Constructor with inputs extracted from a {@link Connection}.
-	 * @deprecated as of 5.2.8, in favor of {@link #ReactorNetty2ClientHttpResponse(HttpClientResponse, Connection)}
-	 */
-	@Deprecated
-	public ReactorNetty2ClientHttpResponse(HttpClientResponse response, NettyInbound inbound, BufferAllocator alloc) {
-		this.response = response;
-		MultiValueMap<String, String> adapter = new Netty5HeadersAdapter(response.responseHeaders());
-		this.headers = HttpHeaders.readOnlyHttpHeaders(adapter);
-		this.inbound = inbound;
-		this.bufferFactory = new Netty5DataBufferFactory(alloc);
-	}
-
 
 	@Override
 	public String getId() {
 		String id = null;
-		if (reactorNettyRequestChannelOperationsIdPresent) {
-			id = ChannelOperationsIdHelper.getId(this.response);
+		if (this.response instanceof ChannelOperationsId operationsId) {
+			id = (logger.isDebugEnabled() ? operationsId.asLongText() : operationsId.asShortText());
 		}
 		if (id == null && this.response instanceof Connection connection) {
 			id = connection.channel().id().asShortText();
@@ -148,11 +129,11 @@ class ReactorNetty2ClientHttpResponse implements ClientHttpResponse {
 		MultiValueMap<String, ResponseCookie> result = new LinkedMultiValueMap<>();
 		this.response.cookies().values().stream()
 				.flatMap(Collection::stream)
-				.forEach(cookie -> result.add(cookie.name(),
-						ResponseCookie.fromClientResponse(cookie.name(), cookie.value())
-								.domain(cookie.domain())
-								.path(cookie.path())
-								.maxAge(cookie.maxAge())
+				.forEach(cookie -> result.add(cookie.name().toString(),
+						ResponseCookie.fromClientResponse(cookie.name().toString(), cookie.value().toString())
+								.domain(cookie.domain() != null ? cookie.domain().toString() : null)
+								.path(cookie.path() != null ? cookie.path().toString() : null)
+								.maxAge(cookie.maxAge() != null ? cookie.maxAge() : -1L)
 								.secure(cookie.isSecure())
 								.httpOnly(cookie.isHttpOnly())
 								.sameSite(getSameSite(cookie))
@@ -161,8 +142,8 @@ class ReactorNetty2ClientHttpResponse implements ClientHttpResponse {
 	}
 
 	@Nullable
-	private static String getSameSite(Cookie cookie) {
-		if (cookie instanceof DefaultCookie defaultCookie) {
+	private static String getSameSite(HttpSetCookie cookie) {
+		if (cookie instanceof DefaultHttpSetCookie defaultCookie) {
 			if (defaultCookie.sameSite() != null) {
 				return defaultCookie.sameSite().name();
 			}
@@ -197,18 +178,6 @@ class ReactorNetty2ClientHttpResponse implements ClientHttpResponse {
 		return "ReactorNetty2ClientHttpResponse{" +
 				"request=[" + this.response.method().name() + " " + this.response.uri() + "]," +
 				"status=" + getRawStatusCode() + '}';
-	}
-
-
-	private static class ChannelOperationsIdHelper {
-
-		@Nullable
-		public static String getId(HttpClientResponse response) {
-			if (response instanceof reactor.netty5.ChannelOperationsId id) {
-				return (logger.isDebugEnabled() ? id.asLongText() : id.asShortText());
-			}
-			return null;
-		}
 	}
 
 }

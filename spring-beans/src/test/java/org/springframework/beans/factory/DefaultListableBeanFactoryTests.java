@@ -35,6 +35,7 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import jakarta.annotation.Priority;
 import org.junit.jupiter.api.Test;
@@ -2008,6 +2009,19 @@ class DefaultListableBeanFactoryTests {
 		DependenciesBean bean = (DependenciesBean)
 				lbf.autowire(DependenciesBean.class, AutowireCapableBeanFactory.AUTOWIRE_BY_TYPE, true);
 		assertThat(bean.getSpouse()).isEqualTo(lbf.getBean("spouse"));
+	}
+
+	@Test
+	void beanProviderWithParentBeanFactoryReuseOrder() {
+		DefaultListableBeanFactory parentBf = new DefaultListableBeanFactory();
+		parentBf.setDependencyComparator(AnnotationAwareOrderComparator.INSTANCE);
+		parentBf.registerBeanDefinition("regular", new RootBeanDefinition(TestBean.class));
+		parentBf.registerBeanDefinition("test", new RootBeanDefinition(HighPriorityTestBean.class));
+		lbf.setDependencyComparator(AnnotationAwareOrderComparator.INSTANCE);
+		lbf.setParentBeanFactory(parentBf);
+		lbf.registerBeanDefinition("low", new RootBeanDefinition(LowPriorityTestBean.class));
+		Stream<Class<?>> orderedTypes = lbf.getBeanProvider(TestBean.class).orderedStream().map(Object::getClass);
+		assertThat(orderedTypes).containsExactly(HighPriorityTestBean.class, LowPriorityTestBean.class, TestBean.class);
 	}
 
 	@Test

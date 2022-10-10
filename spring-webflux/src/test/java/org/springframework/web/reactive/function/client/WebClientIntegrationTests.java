@@ -863,7 +863,7 @@ class WebClientIntegrationTests {
 	@ParameterizedWebClientTest
 	void statusHandlerSuppressedErrorSignalWithFlux(ClientHttpConnector connector) {
 
-		// Temporarily disabled, leads to io.netty5.buffer.api.BufferClosedException
+		// Temporarily disabled, leads to io.netty5.buffer.BufferClosedException
 		if (connector instanceof ReactorNetty2ClientHttpConnector) {
 			return;
 		}
@@ -1188,7 +1188,7 @@ class WebClientIntegrationTests {
 
 		prepareResponse(response -> response
 				.setHeader("Content-Type", "text/plain")
-				.addHeader("Set-Cookie", "testkey1=testvalue1;")
+				.addHeader("Set-Cookie", "testkey1=testvalue1") // TODO invalid ";" at the end
 				.addHeader("Set-Cookie", "testkey2=testvalue2; Max-Age=42; HttpOnly; SameSite=Lax; Secure")
 				.setBody("test"));
 
@@ -1256,6 +1256,26 @@ class WebClientIntegrationTests {
 					assertThat(ex.getCause()).isInstanceOf(IOException.class);
 				})
 				.verify();
+	}
+
+	@ParameterizedWebClientTest
+	void retrieveTextDecodedToFlux(ClientHttpConnector connector) {
+		startServer(connector);
+
+		prepareResponse(response -> response
+				.setHeader("Content-Type", "text/plain")
+				.setBody("Hey now"));
+
+		Flux<String> result = this.webClient.get()
+				.uri("/")
+				.accept(MediaType.TEXT_PLAIN)
+				.retrieve()
+				.bodyToFlux(String.class);
+
+		StepVerifier.create(result)
+				.expectNext("Hey now")
+				.expectComplete()
+				.verify(Duration.ofSeconds(3));
 	}
 
 	private <T> Mono<T> doMalformedChunkedResponseTest(

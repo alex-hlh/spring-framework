@@ -147,7 +147,7 @@ public class SqlScriptsTestExecutionListener extends AbstractTestExecutionListen
 	 * @since 6.0
 	 */
 	@Override
-	public void processAheadOfTime(Class<?> testClass, RuntimeHints runtimeHints, ClassLoader classLoader) {
+	public void processAheadOfTime(RuntimeHints runtimeHints, Class<?> testClass, ClassLoader classLoader) {
 		getSqlAnnotationsFor(testClass).forEach(sql ->
 			registerClasspathResources(getScripts(sql, testClass, null, true), runtimeHints, classLoader));
 		getSqlMethods(testClass).forEach(testMethod ->
@@ -396,7 +396,7 @@ public class SqlScriptsTestExecutionListener extends AbstractTestExecutionListen
 		Arrays.stream(paths)
 				.filter(path -> path.startsWith(CLASSPATH_URL_PREFIX))
 				.map(resourceLoader::getResource)
-				.forEach(runtimeHints.resources()::registerResourceIfNecessary);
+				.forEach(runtimeHints.resources()::registerResource);
 	}
 
 }

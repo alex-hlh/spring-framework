@@ -27,13 +27,13 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.aot.hint.ExecutableMode;
-import org.springframework.aot.hint.FieldMode;
 import org.springframework.aot.hint.MemberCategory;
 import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.TypeReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests for {@link ReflectionHintsPredicates}
@@ -46,8 +46,10 @@ class ReflectionHintsPredicatesTests {
 
 	private static Constructor<?> publicConstructor;
 
+	@SuppressWarnings("unused")
 	private static Method publicMethod;
 
+	@SuppressWarnings("unused")
 	private static Field publicField;
 
 	private final ReflectionHintsPredicates reflection = new ReflectionHintsPredicates();
@@ -261,7 +263,7 @@ class ReflectionHintsPredicatesTests {
 		@Test
 		void privateConstructorInvocationDoesNotMatchConstructorHint() {
 			runtimeHints.reflection().registerType(SampleClass.class, typeHint ->
-					typeHint.withConstructor(TypeReference.listOf(String.class),  ExecutableMode.INTROSPECT));
+					typeHint.withConstructor(TypeReference.listOf(String.class), ExecutableMode.INTROSPECT));
 			assertPredicateDoesNotMatch(reflection.onConstructor(privateConstructor).invoke());
 		}
 
@@ -296,18 +298,6 @@ class ReflectionHintsPredicatesTests {
 			assertPredicateMatches(reflection.onConstructor(privateConstructor).invoke());
 		}
 
-		@Test
-		void reflectionOnAnyConstructorDoesNotMatchTypeReflection() {
-			runtimeHints.reflection().registerType(SampleClass.class);
-			assertPredicateDoesNotMatch(reflection.onType(SampleClass.class).withAnyConstructor());
-		}
-
-		@Test
-		void reflectionOnAnyConstructorMatchesConstructorReflection() {
-			runtimeHints.reflection().registerConstructor(publicConstructor);
-			assertPredicateMatches(reflection.onType(SampleClass.class).withAnyConstructor());
-		}
-
 	}
 
 	@Nested
@@ -318,6 +308,12 @@ class ReflectionHintsPredicatesTests {
 			runtimeHints.reflection().registerType(SampleClass.class, typeHint ->
 					typeHint.withMethod("publicMethod", Collections.emptyList(), ExecutableMode.INTROSPECT));
 			assertPredicateMatches(reflection.onMethod(SampleClass.class, "publicMethod").introspect());
+		}
+
+		@Test
+		void methodIntrospectionFailsForUnknownType() {
+			assertThatThrownBy(() -> reflection.onMethod("com.example.DoesNotExist", "publicMethod").introspect())
+					.isInstanceOf(ClassNotFoundException.class);
 		}
 
 		@Test
@@ -451,18 +447,6 @@ class ReflectionHintsPredicatesTests {
 			assertPredicateMatches(reflection.onMethod(SampleClass.class, "privateMethod").invoke());
 		}
 
-		@Test
-		void reflectionOnAnyMethodDoesNotMatchTypeReflection() {
-			runtimeHints.reflection().registerType(SampleClass.class);
-			assertPredicateDoesNotMatch(reflection.onType(SampleClass.class).withAnyMethod());
-		}
-
-		@Test
-		void reflectionOnAnyMethodMatchesMethodReflection() {
-			runtimeHints.reflection().registerMethod(publicMethod);
-			assertPredicateMatches(reflection.onType(SampleClass.class).withAnyMethod());
-		}
-
 	}
 
 	@Nested
@@ -474,36 +458,21 @@ class ReflectionHintsPredicatesTests {
 		}
 
 		@Test
+		void shouldFailForUnknownClass() {
+			assertThatThrownBy(() -> reflection.onField("com.example.DoesNotExist", "missingField"))
+					.isInstanceOf(ClassNotFoundException.class);
+		}
+
+		@Test
 		void fieldReflectionMatchesFieldHint() {
 			runtimeHints.reflection().registerType(SampleClass.class, typeHint -> typeHint.withField("publicField"));
 			assertPredicateMatches(reflection.onField(SampleClass.class, "publicField"));
 		}
 
 		@Test
-		void fieldWriteReflectionDoesNotMatchFieldHint() {
-			runtimeHints.reflection().registerType(SampleClass.class, typeHint -> typeHint.withField("publicField",
-					FieldMode.READ));
-			assertPredicateDoesNotMatch(reflection.onField(SampleClass.class, "publicField").withWriteMode());
-		}
-
-		@Test
-		void fieldUnsafeReflectionDoesNotMatchFieldHint() {
+		void fieldReflectionDoesNotMatchNonRegisteredFielddHint() {
 			runtimeHints.reflection().registerType(SampleClass.class, typeHint -> typeHint.withField("publicField"));
-			assertPredicateDoesNotMatch(reflection.onField(SampleClass.class, "publicField").allowUnsafeAccess());
-		}
-
-		@Test
-		void fieldWriteReflectionMatchesFieldHintWithWrite() {
-			runtimeHints.reflection().registerType(SampleClass.class, typeHint ->
-					typeHint.withField("publicField", FieldMode.WRITE));
-			assertPredicateMatches(reflection.onField(SampleClass.class, "publicField").withWriteMode());
-		}
-
-		@Test
-		void fieldUnsafeReflectionMatchesFieldHintWithUnsafe() {
-			runtimeHints.reflection().registerType(SampleClass.class,
-					typeHint -> typeHint.withField("publicField", fieldHint -> fieldHint.allowUnsafeAccess(true)));
-			assertPredicateMatches(reflection.onField(SampleClass.class, "publicField").allowUnsafeAccess());
+			assertPredicateDoesNotMatch(reflection.onField(SampleClass.class, "privateField"));
 		}
 
 		@Test
@@ -534,18 +503,6 @@ class ReflectionHintsPredicatesTests {
 		void privateFieldReflectionMatchesDeclaredFieldsHint() {
 			runtimeHints.reflection().registerType(SampleClass.class, MemberCategory.DECLARED_FIELDS);
 			assertPredicateMatches(reflection.onField(SampleClass.class, "privateField"));
-		}
-
-		@Test
-		void reflectionOnAnyFieldDoesNotMatchTypeReflection() {
-			runtimeHints.reflection().registerType(SampleClass.class);
-			assertPredicateDoesNotMatch(reflection.onType(SampleClass.class).withAnyField());
-		}
-
-		@Test
-		void reflectionOnAnyFieldMatchesFieldReflection() {
-			runtimeHints.reflection().registerField(publicField);
-			assertPredicateMatches(reflection.onType(SampleClass.class).withAnyField());
 		}
 
 	}

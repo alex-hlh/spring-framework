@@ -28,12 +28,16 @@ public class CglibConfiguration {
 
 	@Bean
 	public String prefix() {
-		return "Hello" + counter.getAndIncrement();
+		return getPrefix() + counter.getAndIncrement();
 	}
 
 	@Bean
 	public String text() {
 		return prefix() + " World";
+	}
+
+	protected String getPrefix() {
+		return "Hello";
 	}
 
 }

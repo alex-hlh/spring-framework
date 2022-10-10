@@ -26,18 +26,20 @@ import javax.sql.DataSource;
 
 import org.junit.jupiter.api.Test;
 
+import org.springframework.aot.AotDetector;
 import org.springframework.aot.generate.DefaultGenerationContext;
 import org.springframework.aot.generate.GeneratedFiles.Kind;
 import org.springframework.aot.generate.InMemoryGeneratedFiles;
 import org.springframework.aot.hint.MemberCategory;
 import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.TypeReference;
-import org.springframework.aot.test.generate.compile.CompileWithTargetClassAccess;
-import org.springframework.aot.test.generate.compile.TestCompiler;
+import org.springframework.aot.test.generate.CompilerFiles;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextInitializer;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.Profiles;
+import org.springframework.core.test.tools.CompileWithForkedClassLoader;
+import org.springframework.core.test.tools.TestCompiler;
 import org.springframework.javapoet.ClassName;
 import org.springframework.test.context.BootstrapUtils;
 import org.springframework.test.context.MergedContextConfiguration;
@@ -60,6 +62,7 @@ import org.springframework.web.context.WebApplicationContext;
 
 import static java.util.Comparator.comparing;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.springframework.aot.hint.MemberCategory.INVOKE_DECLARED_CONSTRUCTORS;
 import static org.springframework.aot.hint.MemberCategory.INVOKE_DECLARED_METHODS;
 import static org.springframework.aot.hint.MemberCategory.INVOKE_PUBLIC_CONSTRUCTORS;
@@ -72,20 +75,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup;
 
 /**
- * Tests for {@link TestContextAotGenerator}, {@link TestAotMappings},
- * {@link AotContextLoader}, and run-time hints.
+ * Tests for {@link TestContextAotGenerator}, {@link AotTestContextInitializers},
+ * {@link AotTestAttributes}, {@link AotContextLoader}, and run-time hints.
  *
  * @author Sam Brannen
  * @since 6.0
  */
-@CompileWithTargetClassAccess
+@CompileWithForkedClassLoader
 class TestContextAotGeneratorTests extends AbstractAotTests {
 
 	/**
-	 * @see AotIntegrationTests#endToEndTests()
+	 * End-to-end tests within the scope of the {@link TestContextAotGenerator}.
+	 *
+	 * @see AotIntegrationTests
 	 */
 	@Test
-	void processAheadOfTimeAndGenerateTestAotMappings() {
+	void endToEndTests() {
 		Set<Class<?>> testClasses = Set.of(
 				BasicSpringJupiterSharedConfigTests.class,
 				BasicSpringJupiterTests.class,
@@ -106,30 +111,52 @@ class TestContextAotGeneratorTests extends AbstractAotTests {
 		List<String> sourceFiles = generatedFiles.getGeneratedFiles(Kind.SOURCE).keySet().stream().toList();
 		assertThat(sourceFiles).containsExactlyInAnyOrder(expectedSourceFiles);
 
-		TestCompiler.forSystem().withFiles(generatedFiles).compile(ThrowingConsumer.of(compiled -> {
-			TestAotMappings aotTestMappings = new TestAotMappings();
-			for (Class<?> testClass : testClasses) {
-				MergedContextConfiguration mergedConfig = buildMergedContextConfiguration(testClass);
-				ApplicationContextInitializer<ConfigurableApplicationContext> contextInitializer =
-						aotTestMappings.getContextInitializer(testClass);
-				assertThat(contextInitializer).isNotNull();
-				ApplicationContext context = ((AotContextLoader) mergedConfig.getContextLoader())
-						.loadContextForAotRuntime(mergedConfig, contextInitializer);
-				if (context instanceof WebApplicationContext wac) {
-					assertContextForWebTests(wac);
+		TestCompiler.forSystem().with(CompilerFiles.from(generatedFiles)).compile(ThrowingConsumer.of(compiled -> {
+			try {
+				System.setProperty(AotDetector.AOT_ENABLED, "true");
+				AotTestAttributesFactory.reset();
+				AotTestContextInitializersFactory.reset();
+
+				AotTestAttributes aotAttributes = AotTestAttributes.getInstance();
+				assertThatExceptionOfType(UnsupportedOperationException.class)
+					.isThrownBy(() -> aotAttributes.setAttribute("foo", "bar"))
+					.withMessage("AOT attributes cannot be modified during AOT run-time execution");
+				String key = "@SpringBootConfiguration-" + BasicSpringVintageTests.class.getName();
+				assertThat(aotAttributes.getString(key)).isEqualTo("org.example.Main");
+				assertThat(aotAttributes.getBoolean(key + "-active1")).isTrue();
+				assertThat(aotAttributes.getBoolean(key + "-active2")).isTrue();
+				assertThat(aotAttributes.getString("bogus")).isNull();
+				assertThat(aotAttributes.getBoolean("bogus")).isFalse();
+
+				AotTestContextInitializers aotContextInitializers = new AotTestContextInitializers();
+				for (Class<?> testClass : testClasses) {
+					MergedContextConfiguration mergedConfig = buildMergedContextConfiguration(testClass);
+					ApplicationContextInitializer<ConfigurableApplicationContext> contextInitializer =
+							aotContextInitializers.getContextInitializer(testClass);
+					assertThat(contextInitializer).isNotNull();
+					ApplicationContext context = ((AotContextLoader) mergedConfig.getContextLoader())
+							.loadContextForAotRuntime(mergedConfig, contextInitializer);
+					if (context instanceof WebApplicationContext wac) {
+						assertContextForWebTests(wac);
+					}
+					else if (testClass.getPackageName().contains("jdbc")) {
+						assertContextForJdbcTests(context);
+					}
+					else {
+						assertContextForBasicTests(context);
+					}
 				}
-				else if (testClass.getPackageName().contains("jdbc")) {
-					assertContextForJdbcTests(context);
-				}
-				else {
-					assertContextForBasicTests(context);
-				}
+			}
+			finally {
+				System.clearProperty(AotDetector.AOT_ENABLED);
+				AotTestAttributesFactory.reset();
 			}
 		}));
 	}
 
 	private static void assertRuntimeHints(RuntimeHints runtimeHints) {
-		assertReflectionRegistered(runtimeHints, TestAotMappings.GENERATED_MAPPINGS_CLASS_NAME, INVOKE_PUBLIC_METHODS);
+		assertReflectionRegistered(runtimeHints, AotTestContextInitializersCodeGenerator.GENERATED_MAPPINGS_CLASS_NAME, INVOKE_PUBLIC_METHODS);
+		assertReflectionRegistered(runtimeHints, AotTestAttributesCodeGenerator.GENERATED_ATTRIBUTES_CLASS_NAME, INVOKE_PUBLIC_METHODS);
 
 		Stream.of(
 			org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.class,
@@ -166,7 +193,8 @@ class TestContextAotGeneratorTests extends AbstractAotTests {
 		// ContextCustomizerFactory
 		Stream.of(
 			"org.springframework.test.context.support.DynamicPropertiesContextCustomizerFactory",
-			"org.springframework.test.context.web.socket.MockServerContainerContextCustomizerFactory"
+			"org.springframework.test.context.web.socket.MockServerContainerContextCustomizerFactory",
+			"org.springframework.test.context.aot.samples.basic.ImportsContextCustomizerFactory"
 		).forEach(type -> assertReflectionRegistered(runtimeHints, type, INVOKE_DECLARED_CONSTRUCTORS));
 
 		Stream.of(
@@ -295,7 +323,7 @@ class TestContextAotGeneratorTests extends AbstractAotTests {
 		InMemoryGeneratedFiles generatedFiles = new InMemoryGeneratedFiles();
 		TestContextAotGenerator generator = new TestContextAotGenerator(generatedFiles);
 		List<Mapping> mappings = processAheadOfTime(generator, testClasses);
-		TestCompiler.forSystem().withFiles(generatedFiles).compile(ThrowingConsumer.of(compiled -> {
+		TestCompiler.forSystem().with(CompilerFiles.from(generatedFiles)).compile(ThrowingConsumer.of(compiled -> {
 			for (Mapping mapping : mappings) {
 				MergedContextConfiguration mergedConfig = mapping.mergedConfig();
 				ApplicationContextInitializer<ConfigurableApplicationContext> contextInitializer =
@@ -331,7 +359,8 @@ class TestContextAotGeneratorTests extends AbstractAotTests {
 
 	private static final String[] expectedSourceFiles = {
 			// Global
-			"org/springframework/test/context/aot/TestAotMappings__Generated.java",
+			"org/springframework/test/context/aot/AotTestContextInitializers__Generated.java",
+			"org/springframework/test/context/aot/AotTestAttributes__Generated.java",
 			// BasicSpringJupiterSharedConfigTests
 			"org/springframework/context/event/DefaultEventListenerFactory__TestContext001_BeanDefinitions.java",
 			"org/springframework/context/event/EventListenerMethodProcessor__TestContext001_BeanDefinitions.java",

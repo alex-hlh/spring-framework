@@ -44,6 +44,7 @@ import org.springframework.util.StringUtils;
  * Generates a method that returns a {@link BeanDefinition} to be registered.
  *
  * @author Phillip Webb
+ * @author Stephane Nicoll
  * @since 6.0
  * @see BeanDefinitionMethodGeneratorFactory
  */
@@ -75,11 +76,11 @@ class BeanDefinitionMethodGenerator {
 
 		this.methodGeneratorFactory = methodGeneratorFactory;
 		this.registeredBean = registeredBean;
-		this.constructorOrFactoryMethod = ConstructorOrFactoryMethodResolver
-				.resolve(registeredBean);
+		this.constructorOrFactoryMethod = registeredBean.resolveConstructorOrFactoryMethod();
 		this.innerBeanPropertyName = innerBeanPropertyName;
 		this.aotContributions = aotContributions;
 	}
+
 
 	/**
 	 * Generate the method that returns the {@link BeanDefinition} to be
@@ -94,29 +95,55 @@ class BeanDefinitionMethodGenerator {
 		registerRuntimeHintsIfNecessary(generationContext.getRuntimeHints());
 		BeanRegistrationCodeFragments codeFragments = getCodeFragments(generationContext,
 				beanRegistrationsCode);
-		Class<?> target = codeFragments.getTarget(this.registeredBean,
-				this.constructorOrFactoryMethod);
-		if (!target.getName().startsWith("java.")) {
-			GeneratedClass generatedClass = generationContext.getGeneratedClasses()
-					.getOrAddForFeatureComponent("BeanDefinitions", target, type -> {
-						type.addJavadoc("Bean definitions for {@link $T}", target);
-						type.addModifiers(Modifier.PUBLIC);
-					});
-			GeneratedMethods generatedMethods = generatedClass.getMethods()
-					.withPrefix(getName());
-			GeneratedMethod generatedMethod = generateBeanDefinitionMethod(
-					generationContext, generatedClass.getName(), generatedMethods,
-					codeFragments, Modifier.PUBLIC);
-			return MethodReference.ofStatic(generatedClass.getName(),
-					generatedMethod.getName());
+		ClassName target = codeFragments.getTarget(this.registeredBean, this.constructorOrFactoryMethod);
+		if (!target.canonicalName().startsWith("java.")) {
+			GeneratedClass generatedClass = lookupGeneratedClass(generationContext, target);
+			GeneratedMethods generatedMethods = generatedClass.getMethods().withPrefix(getName());
+			GeneratedMethod generatedMethod = generateBeanDefinitionMethod(generationContext,
+					generatedClass.getName(), generatedMethods, codeFragments, Modifier.PUBLIC);
+			return generatedMethod.toMethodReference();
 		}
-		GeneratedMethods generatedMethods = beanRegistrationsCode.getMethods()
-				.withPrefix(getName());
+		GeneratedMethods generatedMethods = beanRegistrationsCode.getMethods().withPrefix(getName());
 		GeneratedMethod generatedMethod = generateBeanDefinitionMethod(generationContext,
-				beanRegistrationsCode.getClassName(), generatedMethods, codeFragments,
-				Modifier.PRIVATE);
-		return MethodReference.ofStatic(beanRegistrationsCode.getClassName(),
-				generatedMethod.getName());
+				beanRegistrationsCode.getClassName(), generatedMethods, codeFragments, Modifier.PRIVATE);
+		return generatedMethod.toMethodReference();
+	}
+
+	/**
+	 * Return the {@link GeneratedClass} to use for the specified {@code target}.
+	 * <p>If the target class is an inner class, a corresponding inner class in
+	 * the original structure is created.
+	 * @param generationContext the generation context to use
+	 * @param target the chosen target class name for the bean definition
+	 * @return the generated class to use
+	 */
+	private static GeneratedClass lookupGeneratedClass(GenerationContext generationContext, ClassName target) {
+		ClassName topLevelClassName = target.topLevelClassName();
+		GeneratedClass generatedClass = generationContext.getGeneratedClasses()
+				.getOrAddForFeatureComponent("BeanDefinitions", topLevelClassName, type -> {
+					type.addJavadoc("Bean definitions for {@link $T}", topLevelClassName);
+					type.addModifiers(Modifier.PUBLIC);
+				});
+		List<String> names = target.simpleNames();
+		if (names.size() == 1) {
+			return generatedClass;
+		}
+		List<String> namesToProcess = names.subList(1, names.size());
+		ClassName currentTargetClassName = topLevelClassName;
+		GeneratedClass tmp = generatedClass;
+		for (String nameToProcess : namesToProcess) {
+			currentTargetClassName = currentTargetClassName.nestedClass(nameToProcess);
+			tmp = createInnerClass(tmp, nameToProcess + "__BeanDefinitions", currentTargetClassName);
+		}
+		return tmp;
+	}
+
+	private static GeneratedClass createInnerClass(GeneratedClass generatedClass,
+			String name, ClassName target) {
+		return generatedClass.getOrAdd(name, type -> {
+			type.addJavadoc("Bean definitions for {@link $T}", target);
+			type.addModifiers(Modifier.PUBLIC, Modifier.STATIC);
+		});
 	}
 
 	private BeanRegistrationCodeFragments getCodeFragments(GenerationContext generationContext,
@@ -187,6 +214,7 @@ class BeanDefinitionMethodGenerator {
 		}
 	}
 
+
 	private static class ProxyRuntimeHintsRegistrar {
 
 		private final AutowireCandidateResolver candidateResolver;
@@ -199,8 +227,7 @@ class BeanDefinitionMethodGenerator {
 			Class<?>[] parameterTypes = method.getParameterTypes();
 			for (int i = 0; i < parameterTypes.length; i++) {
 				MethodParameter methodParam = new MethodParameter(method, i);
-				DependencyDescriptor dependencyDescriptor = new DependencyDescriptor(
-						methodParam, true);
+				DependencyDescriptor dependencyDescriptor = new DependencyDescriptor(methodParam, true);
 				registerProxyIfNecessary(runtimeHints, dependencyDescriptor);
 			}
 		}
@@ -216,13 +243,11 @@ class BeanDefinitionMethodGenerator {
 		}
 
 		private void registerProxyIfNecessary(RuntimeHints runtimeHints, DependencyDescriptor dependencyDescriptor) {
-			Class<?> proxyType = this.candidateResolver
-					.getLazyResolutionProxyClass(dependencyDescriptor, null);
+			Class<?> proxyType = this.candidateResolver.getLazyResolutionProxyClass(dependencyDescriptor, null);
 			if (proxyType != null && Proxy.isProxyClass(proxyType)) {
 				runtimeHints.proxies().registerJdkProxy(proxyType.getInterfaces());
 			}
 		}
-
 	}
 
 }
