@@ -16,135 +16,134 @@
 
 package org.springframework.context.aot;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Collections;
-import java.util.List;
-import java.util.function.Consumer;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import org.springframework.context.annotation.AnnotationConfigApplicationContext;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.support.GenericApplicationContext;
-import org.springframework.javapoet.ClassName;
+import org.springframework.context.aot.AbstractAotProcessor.Settings;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
 /**
- * Tests for {@link AotProcessor}.
+ * Tests for {@link AbstractAotProcessor}.
  *
+ * @author Sam Brannen
  * @author Stephane Nicoll
+ * @since 6.0
  */
 class AotProcessorTests {
 
 	@Test
-	void processGeneratesAssets(@TempDir Path directory) {
-		GenericApplicationContext context = new AnnotationConfigApplicationContext();
-		context.registerBean(SampleApplication.class);
-		AotProcessor processor = new TestAotProcessor(SampleApplication.class, directory);
-		ClassName className = processor.process();
-		assertThat(className).isEqualTo(ClassName.get(SampleApplication.class.getPackageName(),
-				"AotProcessorTests_SampleApplication__ApplicationContextInitializer"));
-		assertThat(directory).satisfies(hasGeneratedAssetsForSampleApplication());
-		context.close();
-	}
-
-	@Test
-	void processingDeletesExistingOutput(@TempDir Path directory) throws IOException {
-		Path sourceOutput = directory.resolve("source");
-		Path resourceOutput = directory.resolve("resource");
-		Path classOutput = directory.resolve("class");
-		Path existingSourceOutput = createExisting(sourceOutput);
-		Path existingResourceOutput = createExisting(resourceOutput);
-		Path existingClassOutput = createExisting(classOutput);
-		AotProcessor processor = new TestAotProcessor(SampleApplication.class,
-				sourceOutput, resourceOutput, classOutput);
-		processor.process();
-		assertThat(existingSourceOutput).doesNotExist();
-		assertThat(existingResourceOutput).doesNotExist();
-		assertThat(existingClassOutput).doesNotExist();
-	}
-
-	@Test
-	void processWithEmptyNativeImageArgumentsDoesNotCreateNativeImageProperties(@TempDir Path directory) {
-		GenericApplicationContext context = new AnnotationConfigApplicationContext();
-		context.registerBean(SampleApplication.class);
-		AotProcessor processor = new TestAotProcessor(SampleApplication.class, directory) {
+	void springAotProcessingIsAvailableInDoProcess(@TempDir Path tempDir) {
+		Settings settings = createTestSettings(tempDir);
+		assertThat(new AbstractAotProcessor<String>(settings) {
 			@Override
-			protected List<String> getDefaultNativeImageArguments(String application) {
-				return Collections.emptyList();
+			protected String doProcess() {
+				assertThat(System.getProperty("spring.aot.processing")).isEqualTo("true");
+				return "Hello";
 			}
-		};
-		processor.process();
-		assertThat(directory.resolve("resource/META-INF/native-image/com.example/example/native-image.properties"))
-				.doesNotExist();
-		context.close();
+		}.process()).isEqualTo("Hello");
 	}
 
-	private Path createExisting(Path directory) throws IOException {
-		Path existing = directory.resolve("existing");
-		Files.createDirectories(directory);
-		Files.createFile(existing);
-		return existing;
+	@Test
+	void builderRejectsMissingSourceOutput() {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> Settings.builder().build())
+			.withMessageContaining("'sourceOutput'");
 	}
 
-	private Consumer<Path> hasGeneratedAssetsForSampleApplication() {
-		return directory -> {
-			assertThat(directory.resolve(
-					"source/org/springframework/context/aot/AotProcessorTests_SampleApplication__ApplicationContextInitializer.java"))
-					.exists().isRegularFile();
-			assertThat(directory.resolve("source/org/springframework/context/aot/AotProcessorTests__BeanDefinitions.java"))
-					.exists().isRegularFile();
-			assertThat(directory.resolve(
-					"source/org/springframework/context/aot/AotProcessorTests_SampleApplication__BeanFactoryRegistrations.java"))
-					.exists().isRegularFile();
-			assertThat(directory.resolve("resource/META-INF/native-image/com.example/example/reflect-config.json"))
-					.exists().isRegularFile();
-			Path nativeImagePropertiesFile = directory
-					.resolve("resource/META-INF/native-image/com.example/example/native-image.properties");
-			assertThat(nativeImagePropertiesFile).exists().isRegularFile().hasContent("""
-					Args = -H:Class=org.springframework.context.aot.AotProcessorTests$SampleApplication \\
-					--report-unsupported-elements-at-runtime \\
-					--no-fallback \\
-					--install-exit-handlers
-					""");
-		};
+	@Test
+	void builderRejectsMissingResourceOutput(@TempDir Path tempDir) {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> Settings.builder().sourceOutput(tempDir).build())
+			.withMessageContaining("'resourceOutput'");
 	}
 
-
-	private static class TestAotProcessor extends AotProcessor {
-
-		public TestAotProcessor(Class<?> application,
-				Path sourceOutput, Path resourceOutput, Path classOutput) {
-			super(application, sourceOutput, resourceOutput, classOutput, "com.example", "example");
-		}
-
-		public TestAotProcessor(Class<?> application, Path rootPath) {
-			super(application, rootPath.resolve("source"), rootPath.resolve("resource"),
-					rootPath.resolve("class"), "com.example", "example");
-		}
-
-		@Override
-		protected GenericApplicationContext prepareApplicationContext(Class<?> application) {
-			AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
-			context.register(application);
-			return context;
-		}
-
+	@Test
+	void builderRejectsMissingClassOutput(@TempDir Path tempDir) {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> Settings.builder()
+				.sourceOutput(tempDir)
+				.resourceOutput(tempDir)
+				.build())
+			.withMessageContaining("'classOutput'");
 	}
 
-	@Configuration(proxyBeanMethods = false)
-	static class SampleApplication {
+	@Test
+	void builderRejectsMissingGroupdId(@TempDir Path tempDir) {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> Settings.builder()
+				.sourceOutput(tempDir)
+				.resourceOutput(tempDir)
+				.classOutput(tempDir)
+				.build())
+			.withMessageContaining("'groupId'");
+	}
 
-		@Bean
-		public String testBean() {
-			return "Hello";
-		}
+	@Test
+	void builderRejectsEmptyGroupdId(@TempDir Path tempDir) {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> Settings.builder()
+				.sourceOutput(tempDir)
+				.resourceOutput(tempDir)
+				.classOutput(tempDir)
+				.groupId("           ")
+				.build())
+			.withMessageContaining("'groupId'");
+	}
 
+	@Test
+	void builderRejectsMissingArtifactId(@TempDir Path tempDir) {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> Settings.builder()
+				.sourceOutput(tempDir)
+				.resourceOutput(tempDir)
+				.classOutput(tempDir)
+				.groupId("my-group")
+				.build())
+			.withMessageContaining("'artifactId'");
+	}
+
+	@Test
+	void builderRejectsEmptyArtifactId(@TempDir Path tempDir) {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> Settings.builder()
+				.sourceOutput(tempDir)
+				.resourceOutput(tempDir)
+				.classOutput(tempDir)
+				.groupId("my-group")
+				.artifactId("           ")
+				.build())
+			.withMessageContaining("'artifactId'");
+	}
+
+	@Test
+	void builderAcceptsRequiredSettings(@TempDir Path tempDir) {
+		Settings settings = Settings.builder()
+				.sourceOutput(tempDir)
+				.resourceOutput(tempDir)
+				.classOutput(tempDir)
+				.groupId("my-group")
+				.artifactId("my-artifact")
+				.build();
+		assertThat(settings).isNotNull();
+		assertThat(settings.getSourceOutput()).isEqualTo(tempDir);
+		assertThat(settings.getResourceOutput()).isEqualTo(tempDir);
+		assertThat(settings.getClassOutput()).isEqualTo(tempDir);
+		assertThat(settings.getGroupId()).isEqualTo("my-group");
+		assertThat(settings.getArtifactId()).isEqualTo("my-artifact");
+	}
+
+	private static Settings createTestSettings(Path tempDir) {
+		return Settings.builder()
+				.sourceOutput(tempDir)
+				.resourceOutput(tempDir)
+				.classOutput(tempDir)
+				.groupId("my-group")
+				.artifactId("my-artifact")
+				.build();
 	}
 
 }

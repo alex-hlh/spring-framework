@@ -69,8 +69,6 @@ import org.springframework.util.TypeUtils;
  * Abstract base class for Jackson based and content type independent
  * {@link HttpMessageConverter} implementations.
  *
- * <p>Compatible with Jackson 2.9 to 2.12, as of Spring 5.3.
- *
  * @author Arjen Poutsma
  * @author Keith Donald
  * @author Rossen Stoyanchev
@@ -369,7 +367,7 @@ public abstract class AbstractJackson2HttpMessageConverter extends AbstractGener
 		Charset charset = getCharset(contentType);
 
 		ObjectMapper objectMapper = selectObjectMapper(javaType.getRawClass(), contentType);
-		Assert.state(objectMapper != null, "No ObjectMapper for " + javaType);
+		Assert.state(objectMapper != null, () -> "No ObjectMapper for " + javaType);
 
 		boolean isUnicode = ENCODINGS.containsKey(charset.name()) ||
 				"UTF-16".equals(charset.name()) ||
@@ -448,7 +446,7 @@ public abstract class AbstractJackson2HttpMessageConverter extends AbstractGener
 		Class<?> clazz = (object instanceof MappingJacksonValue mappingJacksonValue ?
 				mappingJacksonValue.getValue().getClass() : object.getClass());
 		ObjectMapper objectMapper = selectObjectMapper(clazz, contentType);
-		Assert.state(objectMapper != null, "No ObjectMapper for " + clazz.getName());
+		Assert.state(objectMapper != null, () -> "No ObjectMapper for " + clazz.getName());
 
 		OutputStream outputStream = StreamUtils.nonClosing(outputMessage.getBody());
 		try (JsonGenerator generator = objectMapper.getFactory().createGenerator(outputStream, encoding)) {

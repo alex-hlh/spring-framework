@@ -56,6 +56,7 @@ public class SimpleInstantiationStrategy implements InstantiationStrategy {
 	/**
 	 * Set the factory method currently being invoked or {@code null} to reset.
 	 * @param method the factory method currently being invoked or {@code null}
+	 * @since 6.0
 	 */
 	public static void setCurrentlyInvokedFactoryMethod(@Nullable Method method) {
 		currentlyInvokedFactoryMethod.set(method);
@@ -160,7 +161,8 @@ public class SimpleInstantiationStrategy implements InstantiationStrategy {
 					"Cannot access factory method '" + factoryMethod.getName() + "'; is it public?", ex);
 		}
 		catch (InvocationTargetException ex) {
-			String msg = ex.getTargetException().getMessage();
+			String msg = "Factory method '" + factoryMethod.getName() + "' threw exception with message: " +
+					ex.getTargetException().getMessage();
 			if (bd.getFactoryBeanName() != null && owner instanceof ConfigurableBeanFactory &&
 					((ConfigurableBeanFactory) owner).isCurrentlyInCreation(bd.getFactoryBeanName())) {
 				msg = "Circular reference involving containing bean '" + bd.getFactoryBeanName() + "' - consider " +

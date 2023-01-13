@@ -68,12 +68,6 @@ final class HttpComponentsClientHttpRequest extends AbstractBufferingClientHttpR
 	}
 
 	@Override
-	@Deprecated
-	public String getMethodValue() {
-		return this.httpRequest.getMethod();
-	}
-
-	@Override
 	public URI getURI() {
 		try {
 			return this.httpRequest.getUri();
@@ -88,6 +82,7 @@ final class HttpComponentsClientHttpRequest extends AbstractBufferingClientHttpR
 	}
 
 
+	@SuppressWarnings("deprecation")  // execute(ClassicHttpRequest, HttpContext)
 	@Override
 	protected ClientHttpResponse executeInternal(HttpHeaders headers, byte[] bufferedOutput) throws IOException {
 		addHeaders(this.httpRequest, headers);

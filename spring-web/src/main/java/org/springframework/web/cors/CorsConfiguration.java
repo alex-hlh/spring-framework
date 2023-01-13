@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2022 the original author or authors.
+ * Copyright 2002-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -123,7 +123,7 @@ public class CorsConfiguration {
 	 * value may be one of the following:
 	 * <ul>
 	 * <li>a specific domain, e.g. {@code "https://domain1.com"}
-	 * <li>coma-delimited list of specific domains, e.g.
+	 * <li>comma-delimited list of specific domains, e.g.
 	 * {@code "https://a1.com,https://a2.com"}; this is convenient when a value
 	 * is resolved through a property placeholder, e.g. {@code "${origin}"};
 	 * note that such placeholders must be resolved externally.
@@ -177,7 +177,7 @@ public class CorsConfiguration {
 		else if (this.allowedOrigins == DEFAULT_PERMIT_ALL && CollectionUtils.isEmpty(this.allowedOriginPatterns)) {
 			setAllowedOrigins(DEFAULT_PERMIT_ALL);
 		}
-		parseComaDelimitedOrigin(origin, value -> {
+		parseCommaDelimitedOrigin(origin, value -> {
 			value = trimTrailingSlash(value);
 			this.allowedOrigins.add(value);
 		});
@@ -193,7 +193,7 @@ public class CorsConfiguration {
 	 * domain1.com on port 8080 or port 8081
 	 * <li>{@literal https://*.domain1.com:[*]} -- domains ending with
 	 * domain1.com on any port, including the default port
-	 * <li>coma-delimited list of patters, e.g.
+	 * <li>comma-delimited list of patters, e.g.
 	 * {@code "https://*.a1.com,https://*.a2.com"}; this is convenient when a
 	 * value is resolved through a property placeholder, e.g. {@code "${origin}"};
 	 * note that such placeholders must be resolved externally.
@@ -245,7 +245,7 @@ public class CorsConfiguration {
 		if (this.allowedOriginPatterns == null) {
 			this.allowedOriginPatterns = new ArrayList<>(4);
 		}
-		parseComaDelimitedOrigin(originPattern, value -> {
+		parseCommaDelimitedOrigin(originPattern, value -> {
 			value = trimTrailingSlash(value);
 			this.allowedOriginPatterns.add(new OriginPattern(value));
 			if (this.allowedOrigins == DEFAULT_PERMIT_ALL) {
@@ -254,7 +254,7 @@ public class CorsConfiguration {
 		});
 	}
 
-	private static void parseComaDelimitedOrigin(String rawValue, Consumer<String> valueConsumer) {
+	private static void parseCommaDelimitedOrigin(String rawValue, Consumer<String> valueConsumer) {
 		if (rawValue.indexOf(',') == -1) {
 			valueConsumer.accept(rawValue);
 			return;
@@ -263,18 +263,14 @@ public class CorsConfiguration {
 		boolean withinPortRange = false;
 		for (int current = 0; current < rawValue.length(); current++) {
 			switch (rawValue.charAt(current)) {
-				case '[':
-					withinPortRange = true;
-					break;
-				case ']':
-					withinPortRange = false;
-					break;
-				case ',':
+				case '[' -> withinPortRange = true;
+				case ']' -> withinPortRange = false;
+				case ',' -> {
 					if (!withinPortRange) {
 						valueConsumer.accept(rawValue.substring(start, current).trim());
 						start = current + 1;
 					}
-					break;
+				}
 			}
 		}
 		if (start < rawValue.length()) {

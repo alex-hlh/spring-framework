@@ -61,9 +61,9 @@ class NamedValueArgumentResolverTests {
 
 	@BeforeEach
 	void setUp() throws Exception {
-		HttpServiceProxyFactory proxyFactory = new HttpServiceProxyFactory(this.client);
-		proxyFactory.addCustomArgumentResolver(this.argumentResolver);
-		proxyFactory.afterPropertiesSet();
+		HttpServiceProxyFactory proxyFactory = HttpServiceProxyFactory.builder(this.client)
+				.customArgumentResolver(this.argumentResolver)
+				.build();
 
 		this.service = proxyFactory.createClient(Service.class);
 	}
@@ -238,7 +238,7 @@ class NamedValueArgumentResolverTests {
 		}
 
 		@Override
-		protected void addRequestValue(String name, Object value, HttpRequestValues.Builder requestValues) {
+		protected void addRequestValue(String name, Object value, MethodParameter parameter, HttpRequestValues.Builder requestValues) {
 			this.testValues.add(name, (String) value);
 		}
 	}

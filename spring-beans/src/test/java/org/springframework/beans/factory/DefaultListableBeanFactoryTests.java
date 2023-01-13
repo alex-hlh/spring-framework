@@ -983,7 +983,7 @@ class DefaultListableBeanFactoryTests {
 		bd.setPropertyValues(pvs);
 		lbf.registerBeanDefinition("testBean", bd);
 		TestBean testBean = (TestBean) lbf.getBean("testBean");
-		assertThat(testBean.getMyFloat().floatValue() == 1.1f).isTrue();
+		assertThat(testBean.getMyFloat() == 1.1f).isTrue();
 	}
 
 	@Test
@@ -1005,7 +1005,7 @@ class DefaultListableBeanFactoryTests {
 		bd.setPropertyValues(pvs);
 		lbf.registerBeanDefinition("testBean", bd);
 		TestBean testBean = (TestBean) lbf.getBean("testBean");
-		assertThat(testBean.getMyFloat().floatValue() == 1.1f).isTrue();
+		assertThat(testBean.getMyFloat() == 1.1f).isTrue();
 	}
 
 	@Test
@@ -1021,7 +1021,7 @@ class DefaultListableBeanFactoryTests {
 		lbf.registerBeanDefinition("testBean", bd);
 		lbf.registerSingleton("myFloat", "1,1");
 		TestBean testBean = (TestBean) lbf.getBean("testBean");
-		assertThat(testBean.getMyFloat().floatValue() == 1.1f).isTrue();
+		assertThat(testBean.getMyFloat() == 1.1f).isTrue();
 	}
 
 	@Test
@@ -1037,7 +1037,7 @@ class DefaultListableBeanFactoryTests {
 		TestBean testBean = (TestBean) lbf.getBean("testBean");
 		assertThat(testBean.getName()).isEqualTo("myName");
 		assertThat(testBean.getAge()).isEqualTo(5);
-		assertThat(testBean.getMyFloat().floatValue() == 1.1f).isTrue();
+		assertThat(testBean.getMyFloat() == 1.1f).isTrue();
 	}
 
 	@Test
@@ -1054,7 +1054,7 @@ class DefaultListableBeanFactoryTests {
 		TestBean testBean = (TestBean) lbf.getBean("testBean");
 		assertThat(testBean.getName()).isEqualTo("myName");
 		assertThat(testBean.getAge()).isEqualTo(5);
-		assertThat(testBean.getMyFloat().floatValue() == 1.1f).isTrue();
+		assertThat(testBean.getMyFloat() == 1.1f).isTrue();
 	}
 
 	@Test
@@ -1075,12 +1075,12 @@ class DefaultListableBeanFactoryTests {
 		assertThat(test.getSpouse()).isEqualTo(singletonObject);
 
 		Map<?, ?> beansOfType = lbf.getBeansOfType(TestBean.class, false, true);
-		assertThat(beansOfType.size()).isEqualTo(2);
+		assertThat(beansOfType).hasSize(2);
 		assertThat(beansOfType.containsValue(test)).isTrue();
 		assertThat(beansOfType.containsValue(singletonObject)).isTrue();
 
 		beansOfType = lbf.getBeansOfType(null, false, true);
-		assertThat(beansOfType.size()).isEqualTo(2);
+		assertThat(beansOfType).hasSize(2);
 
 		Iterator<String> beanNames = lbf.getBeanNamesIterator();
 		assertThat(beanNames.next()).isEqualTo("test");
@@ -1113,7 +1113,7 @@ class DefaultListableBeanFactoryTests {
 		assertThat(test.getSpouse()).isEqualTo(singletonObject);
 
 		Map<?, ?>  beansOfType = lbf.getBeansOfType(TestBean.class, false, true);
-		assertThat(beansOfType.size()).isEqualTo(2);
+		assertThat(beansOfType).hasSize(2);
 		assertThat(beansOfType.containsValue(test)).isTrue();
 		assertThat(beansOfType.containsValue(singletonObject)).isTrue();
 
@@ -1123,7 +1123,7 @@ class DefaultListableBeanFactoryTests {
 		assertThat(beanNames.next()).isEqualTo("test");
 		assertThat(beanNames.next()).isEqualTo("singletonObject");
 		assertThat(beanNames.hasNext()).isFalse();
-		assertThat(beansOfType.size()).isEqualTo(2);
+		assertThat(beansOfType).hasSize(2);
 
 		assertThat(lbf.containsSingleton("test")).isTrue();
 		assertThat(lbf.containsSingleton("singletonObject")).isTrue();
@@ -1669,18 +1669,18 @@ class DefaultListableBeanFactoryTests {
 		for (ConstructorDependency instance : provider) {
 			resolved.add(instance);
 		}
-		assertThat(resolved.size()).isEqualTo(2);
+		assertThat(resolved).hasSize(2);
 		assertThat(resolved.contains(lbf.getBean("bd1"))).isTrue();
 		assertThat(resolved.contains(lbf.getBean("bd2"))).isTrue();
 
 		resolved = new HashSet<>();
 		provider.forEach(resolved::add);
-		assertThat(resolved.size()).isEqualTo(2);
+		assertThat(resolved).hasSize(2);
 		assertThat(resolved.contains(lbf.getBean("bd1"))).isTrue();
 		assertThat(resolved.contains(lbf.getBean("bd2"))).isTrue();
 
 		resolved = provider.stream().collect(Collectors.toSet());
-		assertThat(resolved.size()).isEqualTo(2);
+		assertThat(resolved).hasSize(2);
 		assertThat(resolved.contains(lbf.getBean("bd1"))).isTrue();
 		assertThat(resolved.contains(lbf.getBean("bd2"))).isTrue();
 	}
@@ -1718,18 +1718,18 @@ class DefaultListableBeanFactoryTests {
 		for (ConstructorDependency instance : provider) {
 			resolved.add(instance);
 		}
-		assertThat(resolved.size()).isEqualTo(2);
+		assertThat(resolved).hasSize(2);
 		assertThat(resolved.contains(lbf.getBean("bd1"))).isTrue();
 		assertThat(resolved.contains(lbf.getBean("bd2"))).isTrue();
 
 		resolved = new HashSet<>();
 		provider.forEach(resolved::add);
-		assertThat(resolved.size()).isEqualTo(2);
+		assertThat(resolved).hasSize(2);
 		assertThat(resolved.contains(lbf.getBean("bd1"))).isTrue();
 		assertThat(resolved.contains(lbf.getBean("bd2"))).isTrue();
 
 		resolved = provider.stream().collect(Collectors.toSet());
-		assertThat(resolved.size()).isEqualTo(2);
+		assertThat(resolved).hasSize(2);
 		assertThat(resolved.contains(lbf.getBean("bd1"))).isTrue();
 		assertThat(resolved.contains(lbf.getBean("bd2"))).isTrue();
 	}

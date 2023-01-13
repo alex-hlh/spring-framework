@@ -37,7 +37,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.client.ClientHttpRequest;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.ClientHttpResponse;
-import org.springframework.http.client.observation.ClientHttpObservationContext;
+import org.springframework.http.client.observation.ClientRequestObservationContext;
 import org.springframework.http.converter.HttpMessageConverter;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -122,7 +122,7 @@ class RestTemplateObservationTests {
 		mockSentRequest(GET, url);
 		mockResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR);
 		willThrow(new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR))
-				.given(errorHandler).handleError(new URI(url), GET, response);
+				.given(errorHandler).handleError(URI.create(url), GET, response);
 
 		assertThatExceptionOfType(HttpServerErrorException.class).isThrownBy(() ->
 				template.execute(url, GET, null, null));
@@ -164,7 +164,7 @@ class RestTemplateObservationTests {
 	}
 
 	private void mockSentRequest(HttpMethod method, String uri, HttpHeaders requestHeaders) throws Exception {
-		given(requestFactory.createRequest(new URI(uri), method)).willReturn(request);
+		given(requestFactory.createRequest(URI.create(uri), method)).willReturn(request);
 		given(request.getHeaders()).willReturn(requestHeaders);
 		given(request.getMethod()).willReturn(method);
 		given(request.getURI()).willReturn(URI.create(uri));
@@ -192,15 +192,15 @@ class RestTemplateObservationTests {
 				.hasObservationWithNameEqualTo("http.client.requests").that();
 	}
 
-	static class ContextAssertionObservationHandler implements ObservationHandler<ClientHttpObservationContext> {
+	static class ContextAssertionObservationHandler implements ObservationHandler<ClientRequestObservationContext> {
 
 		@Override
 		public boolean supportsContext(Observation.Context context) {
-			return context instanceof ClientHttpObservationContext;
+			return context instanceof ClientRequestObservationContext;
 		}
 
 		@Override
-		public void onStart(ClientHttpObservationContext context) {
+		public void onStart(ClientRequestObservationContext context) {
 			assertThat(context.getCarrier()).isNotNull();
 		}
 	}

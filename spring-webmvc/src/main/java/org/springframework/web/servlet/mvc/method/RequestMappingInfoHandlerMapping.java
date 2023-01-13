@@ -44,8 +44,8 @@ import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.UnsatisfiedServletRequestParameterException;
 import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.filter.ServerHttpObservationFilter;
 import org.springframework.web.method.HandlerMethod;
-import org.springframework.web.observation.HttpRequestsObservationFilter;
 import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.servlet.handler.AbstractHandlerMethodMapping;
 import org.springframework.web.servlet.mvc.condition.NameValueExpression;
@@ -148,9 +148,12 @@ public abstract class RequestMappingInfoHandlerMapping extends AbstractHandlerMe
 			extractMatchDetails((PatternsRequestCondition) condition, lookupPath, request);
 		}
 
-		if (!info.getProducesCondition().getProducibleMediaTypes().isEmpty()) {
-			Set<MediaType> mediaTypes = info.getProducesCondition().getProducibleMediaTypes();
-			request.setAttribute(PRODUCIBLE_MEDIA_TYPES_ATTRIBUTE, mediaTypes);
+		ProducesRequestCondition producesCondition = info.getProducesCondition();
+		if (!producesCondition.isEmpty()) {
+			Set<MediaType> mediaTypes = producesCondition.getProducibleMediaTypes();
+			if (!mediaTypes.isEmpty()) {
+				request.setAttribute(PRODUCIBLE_MEDIA_TYPES_ATTRIBUTE, mediaTypes);
+			}
 		}
 	}
 
@@ -173,7 +176,7 @@ public abstract class RequestMappingInfoHandlerMapping extends AbstractHandlerMe
 			request.setAttribute(MATRIX_VARIABLES_ATTRIBUTE, result.getMatrixVariables());
 		}
 		request.setAttribute(BEST_MATCHING_PATTERN_ATTRIBUTE, bestPattern.getPatternString());
-		HttpRequestsObservationFilter.findObservationContext(request)
+		ServerHttpObservationFilter.findObservationContext(request)
 				.ifPresent(context -> context.setPathPattern(bestPattern.getPatternString()));
 		request.setAttribute(URI_TEMPLATE_VARIABLES_ATTRIBUTE, uriVariables);
 	}
@@ -196,7 +199,7 @@ public abstract class RequestMappingInfoHandlerMapping extends AbstractHandlerMe
 			uriVariables = getUrlPathHelper().decodePathVariables(request, uriVariables);
 		}
 		request.setAttribute(BEST_MATCHING_PATTERN_ATTRIBUTE, bestPattern);
-		HttpRequestsObservationFilter.findObservationContext(request)
+		ServerHttpObservationFilter.findObservationContext(request)
 				.ifPresent(context -> context.setPathPattern(bestPattern));
 		request.setAttribute(URI_TEMPLATE_VARIABLES_ATTRIBUTE, uriVariables);
 	}
@@ -242,6 +245,10 @@ public abstract class RequestMappingInfoHandlerMapping extends AbstractHandlerMe
 	@Override
 	protected HandlerMethod handleNoMatch(
 			Set<RequestMappingInfo> infos, String lookupPath, HttpServletRequest request) throws ServletException {
+
+		if (CollectionUtils.isEmpty(infos)) {
+			return null;
+		}
 
 		PartialMatchHelper helper = new PartialMatchHelper(infos, request);
 		if (helper.isEmpty()) {
@@ -290,11 +297,11 @@ public abstract class RequestMappingInfoHandlerMapping extends AbstractHandlerMe
 	/**
 	 * Aggregate all partial matches and expose methods checking across them.
 	 */
-	private static class PartialMatchHelper {
+	private static final class PartialMatchHelper {
 
 		private final List<PartialMatch> partialMatches = new ArrayList<>();
 
-		public PartialMatchHelper(Set<RequestMappingInfo> infos, HttpServletRequest request) {
+		PartialMatchHelper(Set<RequestMappingInfo> infos, HttpServletRequest request) {
 			for (RequestMappingInfo info : infos) {
 				if (info.getActivePatternsCondition().getMatchingCondition(request) != null) {
 					this.partialMatches.add(new PartialMatch(info, request));

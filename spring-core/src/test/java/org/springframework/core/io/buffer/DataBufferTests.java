@@ -318,6 +318,9 @@ class DataBufferTests extends AbstractDataBufferAllocatingTests {
 		assertThat(result).isEqualTo((byte) 'b');
 		assertThat(inputStream.available()).isEqualTo(3);
 
+		assertThat(inputStream.markSupported()).isTrue();
+		inputStream.mark(2);
+
 		byte[] bytes = new byte[2];
 		int len = inputStream.read(bytes);
 		assertThat(len).isEqualTo(2);
@@ -332,6 +335,12 @@ class DataBufferTests extends AbstractDataBufferAllocatingTests {
 
 		assertThat(inputStream.read()).isEqualTo(-1);
 		assertThat(inputStream.read(bytes)).isEqualTo(-1);
+
+		inputStream.reset();
+		bytes = new byte[3];
+		len = inputStream.read(bytes);
+		assertThat(len).isEqualTo(3);
+		assertThat(bytes).containsExactly('c', 'd', 'e');
 
 		release(buffer);
 	}
@@ -524,18 +533,20 @@ class DataBufferTests extends AbstractDataBufferAllocatingTests {
 	}
 
 	@ParameterizedDataBufferAllocatingTest
-	@SuppressWarnings("deprecation")
 	void asByteBufferIndexLength(DataBufferFactory bufferFactory) {
 		super.bufferFactory = bufferFactory;
 
 		DataBuffer buffer = createDataBuffer(3);
 		buffer.write(new byte[]{'a', 'b'});
 
+		@SuppressWarnings("deprecation")
 		ByteBuffer result = buffer.asByteBuffer(1, 2);
 		assertThat(result.capacity()).isEqualTo(2);
 
-		assumeFalse(bufferFactory instanceof Netty5DataBufferFactory,
-				"Netty 5 does share the internal buffer");
+		assumeFalse(bufferFactory instanceof Netty5DataBufferFactory, () -> {
+			DataBufferUtils.release(buffer);
+			return "Netty 5 does share the internal buffer";
+		});
 
 		buffer.write((byte) 'c');
 		assertThat(result.remaining()).isEqualTo(2);
@@ -774,6 +785,9 @@ class DataBufferTests extends AbstractDataBufferAllocatingTests {
 
 		assertThat(result).isEqualTo(bytes);
 
+		if (bufferFactory instanceof Netty5DataBufferFactory) {
+			release(slice);
+		}
 		release(buffer);
 	}
 

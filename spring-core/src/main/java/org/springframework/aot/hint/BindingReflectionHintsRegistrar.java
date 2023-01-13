@@ -16,24 +16,24 @@
 
 package org.springframework.aot.hint;
 
-import java.beans.BeanInfo;
-import java.beans.IntrospectionException;
-import java.beans.Introspector;
-import java.beans.PropertyDescriptor;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.RecordComponent;
 import java.lang.reflect.Type;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import kotlin.jvm.JvmClassMappingKt;
+import kotlin.reflect.KClass;
 
 import org.springframework.core.KotlinDetector;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.ResolvableType;
+import org.springframework.core.annotation.MergedAnnotation;
+import org.springframework.core.annotation.MergedAnnotations;
 import org.springframework.lang.Nullable;
 import org.springframework.util.ClassUtils;
+import org.springframework.util.ReflectionUtils;
 
 /**
  * Register the necessary reflection hints so that the specified type can be
@@ -47,9 +47,12 @@ import org.springframework.util.ClassUtils;
  */
 public class BindingReflectionHintsRegistrar {
 
-	private static final Log logger = LogFactory.getLog(BindingReflectionHintsRegistrar.class);
-
 	private static final String KOTLIN_COMPANION_SUFFIX = "$Companion";
+
+	private static final String JACKSON_ANNOTATION = "com.fasterxml.jackson.annotation.JacksonAnnotation";
+
+	private static final boolean jacksonAnnotationPresent = ClassUtils.isPresent(JACKSON_ANNOTATION,
+			BindingReflectionHintsRegistrar.class.getClassLoader());
 
 	/**
 	 * Register the necessary reflection hints to bind the specified types.
@@ -63,22 +66,12 @@ public class BindingReflectionHintsRegistrar {
 		}
 	}
 
-	/**
-	 * Return whether the type should be skipped.
-	 * @param type the type to evaluate
-	 * @return {@code true} if the type should be skipped
-	 */
-	protected boolean shouldSkipType(Class<?> type) {
+	private boolean shouldSkipType(Class<?> type) {
 		return type.isPrimitive() || type == Object.class;
 	}
 
-	/**
-	 * Return whether the members of the type should be skipped.
-	 * @param type the type to evaluate
-	 * @return {@code true} if the members of the type should be skipped
-	 */
-	protected boolean shouldSkipMembers(Class<?> type) {
-		return type.getCanonicalName().startsWith("java.") || type.isArray();
+	private boolean shouldSkipMembers(Class<?> type) {
+		return (type.getCanonicalName() != null && type.getCanonicalName().startsWith("java.")) || type.isArray();
 	}
 
 	private void registerReflectionHints(ReflectionHints hints, Set<Type> seen, Type type) {
@@ -98,27 +91,28 @@ public class BindingReflectionHintsRegistrar {
 							registerRecordHints(hints, seen, recordComponent.getAccessor());
 						}
 					}
-					else {
-						typeHint.withMembers(
-								MemberCategory.DECLARED_FIELDS,
-								MemberCategory.INVOKE_DECLARED_CONSTRUCTORS);
-						try {
-							BeanInfo beanInfo = Introspector.getBeanInfo(clazz);
-							PropertyDescriptor[] propertyDescriptors = beanInfo.getPropertyDescriptors();
-							for (PropertyDescriptor propertyDescriptor : propertyDescriptors) {
-								registerPropertyHints(hints, seen, propertyDescriptor.getWriteMethod(), 0);
-								registerPropertyHints(hints, seen, propertyDescriptor.getReadMethod(), -1);
-							}
+					typeHint.withMembers(
+							MemberCategory.DECLARED_FIELDS,
+							MemberCategory.INVOKE_DECLARED_CONSTRUCTORS);
+					for (Method method : clazz.getMethods()) {
+						String methodName = method.getName();
+						if (methodName.startsWith("set") && method.getParameterCount() == 1) {
+							registerPropertyHints(hints, seen, method, 0);
 						}
-						catch (IntrospectionException ex) {
-							if (logger.isDebugEnabled()) {
-								logger.debug("Ignoring referenced type [" + clazz.getName() + "]: " + ex.getMessage());
-							}
+						else if ((methodName.startsWith("get") && method.getParameterCount() == 0 && method.getReturnType() != Void.TYPE) ||
+								(methodName.startsWith("is") && method.getParameterCount() == 0 && method.getReturnType() == boolean.class)) {
+							registerPropertyHints(hints, seen, method, -1);
 						}
+					}
+					if (jacksonAnnotationPresent) {
+						registerJacksonHints(hints, clazz);
 					}
 				}
 				if (KotlinDetector.isKotlinType(clazz)) {
+					KotlinDelegate.registerComponentHints(hints, clazz);
 					registerKotlinSerializationHints(hints, clazz);
+					// For Kotlin reflection
+					typeHint.withMembers(MemberCategory.INTROSPECT_DECLARED_METHODS);
 				}
 			});
 		}
@@ -135,8 +129,8 @@ public class BindingReflectionHintsRegistrar {
 	}
 
 	private void registerPropertyHints(ReflectionHints hints, Set<Type> seen, @Nullable Method method, int parameterIndex) {
-		if (method != null && method.getDeclaringClass() != Object.class
-				&& method.getDeclaringClass() != Enum.class) {
+		if (method != null && method.getDeclaringClass() != Object.class &&
+				method.getDeclaringClass() != Enum.class) {
 			hints.registerMethod(method, ExecutableMode.INVOKE);
 			MethodParameter methodParameter = MethodParameter.forExecutable(method, parameterIndex);
 			Type methodParameterType = methodParameter.getGenericParameterType();
@@ -161,6 +155,49 @@ public class BindingReflectionHintsRegistrar {
 			types.add(clazz);
 			for (ResolvableType genericResolvableType : resolvableType.getGenerics()) {
 				collectReferencedTypes(types, genericResolvableType);
+			}
+		}
+	}
+
+	private void registerJacksonHints(ReflectionHints hints, Class<?> clazz) {
+		ReflectionUtils.doWithFields(clazz, field ->
+				MergedAnnotations
+						.from(field, MergedAnnotations.SearchStrategy.TYPE_HIERARCHY)
+						.stream(JACKSON_ANNOTATION)
+						.filter(MergedAnnotation::isMetaPresent)
+						.forEach(annotation -> {
+							Field sourceField = (Field) annotation.getSource();
+							if (sourceField != null) {
+								hints.registerField(sourceField);
+							}
+						}));
+		ReflectionUtils.doWithMethods(clazz, method ->
+				MergedAnnotations
+						.from(method, MergedAnnotations.SearchStrategy.TYPE_HIERARCHY)
+						.stream(JACKSON_ANNOTATION)
+						.filter(MergedAnnotation::isMetaPresent)
+						.forEach(annotation -> {
+							Method sourceMethod = (Method) annotation.getSource();
+							if (sourceMethod != null) {
+								hints.registerMethod(sourceMethod, ExecutableMode.INVOKE);
+							}
+						}));
+	}
+
+	/**
+	 * Inner class to avoid a hard dependency on Kotlin at runtime.
+	 */
+	private static class KotlinDelegate {
+
+		public static void registerComponentHints(ReflectionHints hints, Class<?> type) {
+			KClass<?> kClass = JvmClassMappingKt.getKotlinClass(type);
+			if (kClass.isData()) {
+				for (Method method : type.getMethods()) {
+					String methodName = method.getName();
+					if (methodName.startsWith("component") || methodName.equals("copy") || methodName.equals("copy$default")) {
+						hints.registerMethod(method, ExecutableMode.INVOKE);
+					}
+				}
 			}
 		}
 	}

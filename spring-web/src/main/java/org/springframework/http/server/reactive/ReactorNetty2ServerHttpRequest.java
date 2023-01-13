@@ -143,12 +143,6 @@ class ReactorNetty2ServerHttpRequest extends AbstractServerHttpRequest {
 	}
 
 	@Override
-	@Deprecated
-	public String getMethodValue() {
-		return this.request.method().name();
-	}
-
-	@Override
 	protected MultiValueMap<String, HttpCookie> initCookies() {
 		MultiValueMap<String, HttpCookie> cookies = new LinkedMultiValueMap<>();
 		for (CharSequence name : this.request.cookies().keySet()) {
@@ -202,8 +196,8 @@ class ReactorNetty2ServerHttpRequest extends AbstractServerHttpRequest {
 	@Override
 	@Nullable
 	protected String initId() {
-		if (this.request instanceof Connection) {
-			return ((Connection) this.request).channel().id().asShortText() +
+		if (this.request instanceof Connection connection) {
+			return connection.channel().id().asShortText() +
 					"-" + logPrefixIndex.incrementAndGet();
 		}
 		return null;
@@ -218,8 +212,8 @@ class ReactorNetty2ServerHttpRequest extends AbstractServerHttpRequest {
 		if (id != null) {
 			return id;
 		}
-		if (this.request instanceof Connection) {
-			return ((Connection) this.request).channel().id().asShortText() +
+		if (this.request instanceof Connection connection) {
+			return connection.channel().id().asShortText() +
 					"-" + logPrefixIndex.incrementAndGet();
 		}
 		return getId();

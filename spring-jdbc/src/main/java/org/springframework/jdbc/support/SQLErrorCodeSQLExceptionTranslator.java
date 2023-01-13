@@ -77,6 +77,9 @@ public class SQLErrorCodeSQLExceptionTranslator extends AbstractFallbackSQLExcep
 	private static final int MESSAGE_SQL_THROWABLE_CONSTRUCTOR = 4;
 	private static final int MESSAGE_SQL_SQLEX_CONSTRUCTOR = 5;
 
+	private static final boolean USER_PROVIDED_ERROR_CODES_FILE_PRESENT =
+			new ClassPathResource(SQLErrorCodesFactory.SQL_ERROR_CODE_OVERRIDE_PATH, SQLErrorCodesFactory.class.getClassLoader()).exists();
+
 
 	/** Error codes used by this translator. */
 	@Nullable
@@ -174,6 +177,7 @@ public class SQLErrorCodeSQLExceptionTranslator extends AbstractFallbackSQLExcep
 	}
 
 
+	@SuppressWarnings("deprecation")
 	@Override
 	@Nullable
 	protected DataAccessException doTranslate(String task, @Nullable String sql, SQLException ex) {
@@ -213,8 +217,8 @@ public class SQLErrorCodeSQLExceptionTranslator extends AbstractFallbackSQLExcep
 				// Try to find SQLException with actual error code, looping through the causes.
 				// E.g. applicable to java.sql.DataTruncation as of JDK 1.6.
 				SQLException current = sqlEx;
-				while (current.getErrorCode() == 0 && current.getCause() instanceof SQLException) {
-					current = (SQLException) current.getCause();
+				while (current.getErrorCode() == 0 && current.getCause() instanceof SQLException sqlException) {
+					current = sqlException;
 				}
 				errorCode = Integer.toString(current.getErrorCode());
 			}
@@ -424,8 +428,7 @@ public class SQLErrorCodeSQLExceptionTranslator extends AbstractFallbackSQLExcep
 	 * in the root of the classpath.
 	 */
 	static boolean hasUserProvidedErrorCodesFile() {
-		return new ClassPathResource(SQLErrorCodesFactory.SQL_ERROR_CODE_OVERRIDE_PATH,
-				SQLErrorCodesFactory.class.getClassLoader()).exists();
+		return USER_PROVIDED_ERROR_CODES_FILE_PRESENT;
 	}
 
 }

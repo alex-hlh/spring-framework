@@ -19,6 +19,8 @@ package org.springframework.test.context.cache;
 import java.util.Collections;
 
 import org.springframework.context.ApplicationContextInitializer;
+import org.springframework.core.style.DefaultToStringStyler;
+import org.springframework.core.style.SimpleValueStyler;
 import org.springframework.core.style.ToStringCreator;
 import org.springframework.lang.Nullable;
 import org.springframework.test.context.CacheAwareContextLoaderDelegate;
@@ -37,7 +39,7 @@ import org.springframework.test.context.MergedContextConfiguration;
  * @author Sam Brannen
  * @since 6.0
  */
-class AotMergedContextConfiguration extends MergedContextConfiguration {
+final class AotMergedContextConfiguration extends MergedContextConfiguration {
 
 	private static final long serialVersionUID = 1963364911008547843L;
 
@@ -71,40 +73,20 @@ class AotMergedContextConfiguration extends MergedContextConfiguration {
 		if (this == other) {
 			return true;
 		}
-		if (other == null || other.getClass() != getClass()) {
-			return false;
-		}
-		AotMergedContextConfiguration that = (AotMergedContextConfiguration) other;
-		if (!this.contextInitializerClass.equals(that.contextInitializerClass)) {
-			return false;
-		}
-		if (!nullSafeClassName(getContextLoader()).equals(nullSafeClassName(that.getContextLoader()))) {
-			return false;
-		}
-		if (getParent() == null) {
-			if (that.getParent() != null) {
-				return false;
-			}
-		}
-		else if (!getParent().equals(that.getParent())) {
-			return false;
-		}
-		return true;
+		return ((other instanceof AotMergedContextConfiguration that) &&
+				this.contextInitializerClass.equals(that.contextInitializerClass));
 	}
 
 	@Override
 	public int hashCode() {
-		int result = this.contextInitializerClass.hashCode();
-		result = 31 * result + nullSafeClassName(getContextLoader()).hashCode();
-		result = 31 * result + (getParent() != null ? getParent().hashCode() : 0);
-		return result;
+		return this.contextInitializerClass.hashCode();
 	}
 
 	@Override
 	public String toString() {
-		return new ToStringCreator(this)
-				.append("testClass", getTestClass().getName())
-				.append("contextInitializerClass", this.contextInitializerClass.getName())
+		return new ToStringCreator(this, new DefaultToStringStyler(new SimpleValueStyler()))
+				.append("testClass", getTestClass())
+				.append("contextInitializerClass", this.contextInitializerClass)
 				.append("original", this.original)
 				.toString();
 	}

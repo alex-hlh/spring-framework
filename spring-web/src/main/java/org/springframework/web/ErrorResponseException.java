@@ -26,7 +26,7 @@ import org.springframework.lang.Nullable;
 
 /**
  * {@link RuntimeException} that implements {@link ErrorResponse} to expose
- * an HTTP status, response headers, and a body formatted as an RFC 7808
+ * an HTTP status, response headers, and a body formatted as an RFC 7807
  * {@link ProblemDetail}.
  *
  * <p>The exception can be used as is, or it can be extended as a more specific
@@ -53,14 +53,14 @@ public class ErrorResponseException extends NestedRuntimeException implements Er
 
 
 	/**
-	 * Constructor with a {@link HttpStatusCode}.
+	 * Constructor with an {@link HttpStatusCode}.
 	 */
 	public ErrorResponseException(HttpStatusCode status) {
 		this(status, null);
 	}
 
 	/**
-	 * Constructor with a {@link HttpStatusCode} and an optional cause.
+	 * Constructor with an {@link HttpStatusCode} and an optional cause.
 	 */
 	public ErrorResponseException(HttpStatusCode status, @Nullable Throwable cause) {
 		this(status, ProblemDetail.forStatus(status), cause);
@@ -80,7 +80,7 @@ public class ErrorResponseException extends NestedRuntimeException implements Er
 	 * resolve the detail message with.
 	 * @since 6.0
 	 */
-	protected ErrorResponseException(
+	public ErrorResponseException(
 			HttpStatusCode status, ProblemDetail body, @Nullable Throwable cause,
 			@Nullable String messageDetailCode, @Nullable Object[] messageDetailArguments) {
 

@@ -19,6 +19,8 @@ package org.springframework.aot.hint
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.ThrowingConsumer
 import org.junit.jupiter.api.Test
+import org.springframework.aot.hint.predicate.RuntimeHintsPredicates
+import java.lang.reflect.Method
 
 /**
  * Tests for Kotlin support in [BindingReflectionHintsRegistrar].
@@ -32,7 +34,7 @@ class KotlinBindingReflectionHintsRegistrarTests {
 	private val hints = RuntimeHints()
 
 	@Test
-	fun `Register type for Kotlinx serialization`() {
+	fun `Register reflection hints for Kotlinx serialization`() {
 		bindingRegistrar.registerReflectionHints(hints.reflection(), SampleSerializableClass::class.java)
 		assertThat(hints.reflection().typeHints()).satisfiesExactlyInAnyOrder(
 			ThrowingConsumer { typeHint: TypeHint ->
@@ -59,7 +61,29 @@ class KotlinBindingReflectionHintsRegistrarTests {
 					})
 			})
 	}
+
+	@Test
+	fun `Register reflection hints for Kotlin data class`() {
+		bindingRegistrar.registerReflectionHints(hints.reflection(), SampleDataClass::class.java)
+		assertThat(RuntimeHintsPredicates.reflection().onMethod(SampleDataClass::class.java, "component1")).accepts(hints)
+		assertThat(RuntimeHintsPredicates.reflection().onMethod(SampleDataClass::class.java, "copy")).accepts(hints)
+		assertThat(RuntimeHintsPredicates.reflection().onMethod(SampleDataClass::class.java, "getName")).accepts(hints)
+		val copyDefault: Method = SampleDataClass::class.java.getMethod("copy\$default", SampleDataClass::class.java,
+			String::class.java , Int::class.java, Object::class.java)
+		assertThat(RuntimeHintsPredicates.reflection().onMethod(copyDefault)).accepts(hints)
+	}
+
+	@Test
+	fun `Register reflection hints on declared methods for Kotlin class`() {
+		bindingRegistrar.registerReflectionHints(hints.reflection(), SampleClass::class.java)
+		assertThat(RuntimeHintsPredicates.reflection().onType(SampleClass::class.java)
+			.withMemberCategory(MemberCategory.INTROSPECT_DECLARED_METHODS)).accepts(hints)
+	}
 }
 
 @kotlinx.serialization.Serializable
 class SampleSerializableClass(val name: String)
+
+data class SampleDataClass(val name: String)
+
+class SampleClass(val name: String)

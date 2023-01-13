@@ -72,7 +72,7 @@ class SockJsClientTests {
 
 	@Test
 	@SuppressWarnings("deprecation")
-	void connectWebSocket() throws Exception {
+	void connectWebSocket() {
 		setupInfoRequest(true);
 		this.sockJsClient.doHandshake(handler, URL).addCallback(this.connectCallback);
 		assertThat(this.webSocketTransport.invoked()).isTrue();
@@ -94,7 +94,7 @@ class SockJsClientTests {
 
 	@Test
 	@SuppressWarnings("deprecation")
-	void connectXhrStreamingDisabled() throws Exception {
+	void connectXhrStreamingDisabled() {
 		setupInfoRequest(false);
 		this.xhrTransport.setStreamingDisabled(true);
 		this.sockJsClient.doHandshake(handler, URL).addCallback(this.connectCallback);
@@ -105,29 +105,29 @@ class SockJsClientTests {
 
 	@Test  // SPR-13254
 	@SuppressWarnings("deprecation")
-	void connectWithHandshakeHeaders() throws Exception {
+	void connectWithHandshakeHeaders() {
 		ArgumentCaptor<HttpHeaders> headersCaptor = setupInfoRequest(false);
 		this.xhrTransport.setStreamingDisabled(true);
 
 		WebSocketHttpHeaders headers = new WebSocketHttpHeaders();
 		headers.set("foo", "bar");
 		headers.set("auth", "123");
-		this.sockJsClient.doHandshake(handler, headers, new URI(URL)).addCallback(this.connectCallback);
+		this.sockJsClient.doHandshake(handler, headers, URI.create(URL)).addCallback(this.connectCallback);
 
 		HttpHeaders httpHeaders = headersCaptor.getValue();
-		assertThat(httpHeaders.size()).isEqualTo(2);
+		assertThat(httpHeaders).hasSize(2);
 		assertThat(httpHeaders.getFirst("foo")).isEqualTo("bar");
 		assertThat(httpHeaders.getFirst("auth")).isEqualTo("123");
 
 		httpHeaders = this.xhrTransport.getRequest().getHttpRequestHeaders();
-		assertThat(httpHeaders.size()).isEqualTo(2);
+		assertThat(httpHeaders).hasSize(2);
 		assertThat(httpHeaders.getFirst("foo")).isEqualTo("bar");
 		assertThat(httpHeaders.getFirst("auth")).isEqualTo("123");
 	}
 
 	@Test
 	@SuppressWarnings("deprecation")
-	void connectAndUseSubsetOfHandshakeHeadersForHttpRequests() throws Exception {
+	void connectAndUseSubsetOfHandshakeHeadersForHttpRequests() {
 		ArgumentCaptor<HttpHeaders> headersCaptor = setupInfoRequest(false);
 		this.xhrTransport.setStreamingDisabled(true);
 
@@ -135,17 +135,17 @@ class SockJsClientTests {
 		headers.set("foo", "bar");
 		headers.set("auth", "123");
 		this.sockJsClient.setHttpHeaderNames("auth");
-		this.sockJsClient.doHandshake(handler, headers, new URI(URL)).addCallback(this.connectCallback);
+		this.sockJsClient.doHandshake(handler, headers, URI.create(URL)).addCallback(this.connectCallback);
 
-		assertThat(headersCaptor.getValue().size()).isEqualTo(1);
+		assertThat(headersCaptor.getValue()).hasSize(1);
 		assertThat(headersCaptor.getValue().getFirst("auth")).isEqualTo("123");
-		assertThat(this.xhrTransport.getRequest().getHttpRequestHeaders().size()).isEqualTo(1);
+		assertThat(this.xhrTransport.getRequest().getHttpRequestHeaders()).hasSize(1);
 		assertThat(this.xhrTransport.getRequest().getHttpRequestHeaders().getFirst("auth")).isEqualTo("123");
 	}
 
 	@Test
 	@SuppressWarnings("deprecation")
-	void connectSockJsInfo() throws Exception {
+	void connectSockJsInfo() {
 		setupInfoRequest(true);
 		this.sockJsClient.doHandshake(handler, URL);
 		verify(this.infoReceiver, times(1)).executeInfoRequest(any(), any());
@@ -153,7 +153,7 @@ class SockJsClientTests {
 
 	@Test
 	@SuppressWarnings("deprecation")
-	void connectSockJsInfoCached() throws Exception {
+	void connectSockJsInfoCached() {
 		setupInfoRequest(true);
 		this.sockJsClient.doHandshake(handler, URL);
 		this.sockJsClient.doHandshake(handler, URL);

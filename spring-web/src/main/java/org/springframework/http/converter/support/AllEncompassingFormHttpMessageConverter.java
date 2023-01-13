@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2021 the original author or authors.
+ * Copyright 2002-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 
 package org.springframework.http.converter.support;
 
-import org.springframework.core.SpringProperties;
 import org.springframework.http.converter.FormHttpMessageConverter;
 import org.springframework.http.converter.cbor.KotlinSerializationCborHttpMessageConverter;
 import org.springframework.http.converter.json.GsonHttpMessageConverter;
@@ -27,7 +26,6 @@ import org.springframework.http.converter.protobuf.KotlinSerializationProtobufHt
 import org.springframework.http.converter.smile.MappingJackson2SmileHttpMessageConverter;
 import org.springframework.http.converter.xml.Jaxb2RootElementHttpMessageConverter;
 import org.springframework.http.converter.xml.MappingJackson2XmlHttpMessageConverter;
-import org.springframework.http.converter.xml.SourceHttpMessageConverter;
 import org.springframework.util.ClassUtils;
 
 /**
@@ -40,13 +38,6 @@ import org.springframework.util.ClassUtils;
  * @since 3.2
  */
 public class AllEncompassingFormHttpMessageConverter extends FormHttpMessageConverter {
-
-	/**
-	 * Boolean flag controlled by a {@code spring.xml.ignore} system property that instructs Spring to
-	 * ignore XML, i.e. to not initialize the XML-related infrastructure.
-	 * <p>The default is "false".
-	 */
-	private static final boolean shouldIgnoreXml = SpringProperties.getFlag("spring.xml.ignore");
 
 	private static final boolean jaxb2Present;
 
@@ -82,17 +73,9 @@ public class AllEncompassingFormHttpMessageConverter extends FormHttpMessageConv
 
 
 	public AllEncompassingFormHttpMessageConverter() {
-		if (!shouldIgnoreXml) {
-			try {
-				addPartConverter(new SourceHttpMessageConverter<>());
-			}
-			catch (Error err) {
-				// Ignore when no TransformerFactory implementation is available
-			}
 
-			if (jaxb2Present && !jackson2XmlPresent) {
-				addPartConverter(new Jaxb2RootElementHttpMessageConverter());
-			}
+		if (jaxb2Present && !jackson2XmlPresent) {
+			addPartConverter(new Jaxb2RootElementHttpMessageConverter());
 		}
 
 		if (kotlinSerializationJsonPresent) {
@@ -108,7 +91,7 @@ public class AllEncompassingFormHttpMessageConverter extends FormHttpMessageConv
 			addPartConverter(new JsonbHttpMessageConverter());
 		}
 
-		if (jackson2XmlPresent && !shouldIgnoreXml) {
+		if (jackson2XmlPresent) {
 			addPartConverter(new MappingJackson2XmlHttpMessageConverter());
 		}
 

@@ -17,6 +17,7 @@
 package org.springframework.context.aot;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.function.BiConsumer;
@@ -52,16 +53,18 @@ import org.springframework.context.annotation.AnnotationConfigUtils;
 import org.springframework.context.annotation.CommonAnnotationBeanPostProcessor;
 import org.springframework.context.annotation.ContextAnnotationAutowireCandidateResolver;
 import org.springframework.context.support.GenericApplicationContext;
+import org.springframework.context.testfixture.context.annotation.AutowiredComponent;
+import org.springframework.context.testfixture.context.annotation.AutowiredGenericTemplate;
+import org.springframework.context.testfixture.context.annotation.CglibConfiguration;
+import org.springframework.context.testfixture.context.annotation.ConfigurableCglibConfiguration;
+import org.springframework.context.testfixture.context.annotation.GenericTemplateConfiguration;
+import org.springframework.context.testfixture.context.annotation.InitDestroyComponent;
+import org.springframework.context.testfixture.context.annotation.LazyAutowiredFieldComponent;
+import org.springframework.context.testfixture.context.annotation.LazyAutowiredMethodComponent;
+import org.springframework.context.testfixture.context.annotation.LazyConstructorArgumentComponent;
+import org.springframework.context.testfixture.context.annotation.LazyFactoryMethodArgumentComponent;
+import org.springframework.context.testfixture.context.annotation.PropertySourceConfiguration;
 import org.springframework.context.testfixture.context.generator.SimpleComponent;
-import org.springframework.context.testfixture.context.generator.annotation.AutowiredComponent;
-import org.springframework.context.testfixture.context.generator.annotation.CglibConfiguration;
-import org.springframework.context.testfixture.context.generator.annotation.ConfigurableCglibConfiguration;
-import org.springframework.context.testfixture.context.generator.annotation.InitDestroyComponent;
-import org.springframework.context.testfixture.context.generator.annotation.LazyAutowiredFieldComponent;
-import org.springframework.context.testfixture.context.generator.annotation.LazyAutowiredMethodComponent;
-import org.springframework.context.testfixture.context.generator.annotation.LazyConstructorArgumentComponent;
-import org.springframework.context.testfixture.context.generator.annotation.LazyFactoryMethodArgumentComponent;
-import org.springframework.context.testfixture.context.generator.annotation.PropertySourceConfiguration;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.PropertySource;
@@ -110,6 +113,18 @@ class ApplicationContextAotGeneratorTests {
 			AutowiredComponent bean = freshApplicationContext.getBean(AutowiredComponent.class);
 			assertThat(bean.getEnvironment()).isSameAs(freshApplicationContext.getEnvironment());
 			assertThat(bean.getCounter()).isEqualTo(42);
+		});
+	}
+
+	@Test
+	void processAheadOfTimeWhenHasAutowiringOnUnresolvedGeneric() {
+		GenericApplicationContext applicationContext = new AnnotationConfigApplicationContext();
+		applicationContext.registerBean(GenericTemplateConfiguration.class);
+		applicationContext.registerBean("autowiredComponent", AutowiredGenericTemplate.class);
+		testCompiledResult(applicationContext, (initializer, compiled) -> {
+			GenericApplicationContext freshApplicationContext = toFreshApplicationContext(initializer);
+			AutowiredGenericTemplate bean = freshApplicationContext.getBean(AutowiredGenericTemplate.class);
+			assertThat(bean).hasFieldOrPropertyWithValue("genericTemplate", applicationContext.getBean("genericTemplate"));
 		});
 	}
 
@@ -297,10 +312,15 @@ class ApplicationContextAotGeneratorTests {
 			GenericApplicationContext applicationContext = new AnnotationConfigApplicationContext();
 			applicationContext.registerBean(CglibConfiguration.class);
 			TestGenerationContext context = processAheadOfTime(applicationContext);
-			String proxyClassName = CglibConfiguration.class.getName() + "$$SpringCGLIB$$0";
+			isRegisteredCglibClass(context, CglibConfiguration.class.getName() + "$$SpringCGLIB$$0");
+			isRegisteredCglibClass(context, CglibConfiguration.class.getName() + "$$SpringCGLIB$$1");
+			isRegisteredCglibClass(context, CglibConfiguration.class.getName() + "$$SpringCGLIB$$2");
+		}
+
+		private void isRegisteredCglibClass(TestGenerationContext context, String cglibClassName) throws IOException {
 			assertThat(context.getGeneratedFiles()
-					.getGeneratedFileContent(Kind.CLASS, proxyClassName.replace('.', '/') + ".class")).isNotNull();
-			assertThat(RuntimeHintsPredicates.reflection().onType(TypeReference.of(proxyClassName))
+					.getGeneratedFileContent(Kind.CLASS, cglibClassName.replace('.', '/') + ".class")).isNotNull();
+			assertThat(RuntimeHintsPredicates.reflection().onType(TypeReference.of(cglibClassName))
 					.withMemberCategory(MemberCategory.INVOKE_DECLARED_CONSTRUCTORS)).accepts(context.getRuntimeHints());
 		}
 
@@ -326,6 +346,16 @@ class ApplicationContextAotGeneratorTests {
 				assertThat(freshApplicationContext.getBean("prefix", String.class)).isEqualTo("Hi0");
 				assertThat(freshApplicationContext.getBean("text", String.class)).isEqualTo("Hi0 World");
 			});
+		}
+
+		@Test
+		void processAheadOfTimeWhenHasCglibProxyWithArgumentsRegisterIntrospectionHintsOnUserClass() {
+			GenericApplicationContext applicationContext = new AnnotationConfigApplicationContext();
+			applicationContext.registerBean(ConfigurableCglibConfiguration.class);
+			TestGenerationContext generationContext = processAheadOfTime(applicationContext);
+			Constructor<?> userConstructor = ConfigurableCglibConfiguration.class.getDeclaredConstructors()[0];
+			assertThat(RuntimeHintsPredicates.reflection().onConstructor(userConstructor).introspect())
+					.accepts(generationContext.getRuntimeHints());
 		}
 
 	}

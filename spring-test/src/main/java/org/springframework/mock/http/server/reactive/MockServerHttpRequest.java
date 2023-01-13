@@ -43,7 +43,6 @@ import org.springframework.util.Assert;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MimeType;
 import org.springframework.util.MultiValueMap;
-import org.springframework.util.StringUtils;
 import org.springframework.web.util.UriComponentsBuilder;
 
 /**
@@ -88,12 +87,6 @@ public final class MockServerHttpRequest extends AbstractServerHttpRequest {
 	@Override
 	public HttpMethod getMethod() {
 		return this.httpMethod;
-	}
-
-	@Override
-	@Deprecated
-	public String getMethodValue() {
-		return this.httpMethod.name();
 	}
 
 	@Override
@@ -242,7 +235,7 @@ public final class MockServerHttpRequest extends AbstractServerHttpRequest {
 	 */
 	@Deprecated(since = "6.0")
 	public static BodyBuilder method(String httpMethod, String uri, Object... vars) {
-		Assert.isTrue(StringUtils.hasText(httpMethod), "HTTP method is required.");
+		Assert.hasText(httpMethod, "HTTP method is required.");
 		return new DefaultBodyBuilder(HttpMethod.valueOf(httpMethod), toUri(uri, vars));
 	}
 

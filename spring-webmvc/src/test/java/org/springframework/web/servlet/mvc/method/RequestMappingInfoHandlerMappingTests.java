@@ -25,6 +25,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.RequestPath;
+import org.springframework.http.server.observation.ServerRequestObservationContext;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Controller;
 import org.springframework.util.MultiValueMap;
@@ -46,11 +48,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.support.StaticWebApplicationContext;
+import org.springframework.web.filter.ServerHttpObservationFilter;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.method.support.InvocableHandlerMethod;
 import org.springframework.web.method.support.ModelAndViewContainer;
-import org.springframework.web.observation.HttpRequestsObservationContext;
-import org.springframework.web.observation.HttpRequestsObservationFilter;
 import org.springframework.web.servlet.HandlerExecutionChain;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.HandlerMapping;
@@ -295,8 +296,8 @@ class RequestMappingInfoHandlerMappingTests {
 	void handleMatchBestMatchingPatternAttributeInObservationContext(TestRequestMappingInfoHandlerMapping mapping) {
 		RequestMappingInfo key = RequestMappingInfo.paths("/{path1}/2", "/**").build();
 		MockHttpServletRequest request = new MockHttpServletRequest("GET", "/1/2");
-		HttpRequestsObservationContext observationContext = new HttpRequestsObservationContext(request, new MockHttpServletResponse());
-		request.setAttribute(HttpRequestsObservationFilter.CURRENT_OBSERVATION_CONTEXT_ATTRIBUTE, observationContext);
+		ServerRequestObservationContext observationContext = new ServerRequestObservationContext(request, new MockHttpServletResponse());
+		request.setAttribute(ServerHttpObservationFilter.CURRENT_OBSERVATION_CONTEXT_ATTRIBUTE, observationContext);
 		mapping.handleMatch(key, "/1/2", request);
 
 		assertThat(request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE)).isEqualTo("/{path1}/2");
@@ -364,12 +365,12 @@ class RequestMappingInfoHandlerMappingTests {
 
 		assertThat(matrixVariables).isNotNull();
 		if (mapping.getPatternParser() != null) {
-			assertThat(matrixVariables.size()).isEqualTo(1);
+			assertThat(matrixVariables).hasSize(1);
 			assertThat(matrixVariables.getFirst("b")).isEqualTo("c");
 			assertThat(uriVariables.get("foo")).isEqualTo("a=42");
 		}
 		else {
-			assertThat(matrixVariables.size()).isEqualTo(2);
+			assertThat(matrixVariables).hasSize(2);
 			assertThat(matrixVariables.getFirst("a")).isEqualTo("42");
 			assertThat(matrixVariables.getFirst("b")).isEqualTo("c");
 			assertThat(uriVariables.get("foo")).isEqualTo("a=42");
@@ -395,6 +396,18 @@ class RequestMappingInfoHandlerMappingTests {
 		assertThat(matrixVariables).isNotNull();
 		assertThat(matrixVariables.get("mvar")).isEqualTo(Collections.singletonList("a/b"));
 		assertThat(uriVariables.get("cars")).isEqualTo("cars");
+	}
+
+	@PathPatternsParameterizedTest // gh-29611
+	void handleNoMatchWithoutPartialMatches(TestRequestMappingInfoHandlerMapping mapping) throws ServletException {
+		String path = "/non-existent";
+		MockHttpServletRequest request = new MockHttpServletRequest("GET", path);
+
+		HandlerMethod handlerMethod = mapping.handleNoMatch(new HashSet<>(), path, request);
+		assertThat(handlerMethod).isNull();
+
+		handlerMethod = mapping.handleNoMatch(null, path, request);
+		assertThat(handlerMethod).isNull();
 	}
 
 	private HandlerMethod getHandler(
